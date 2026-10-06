@@ -1,0 +1,18 @@
+{
+	"node": "@spicyapi/n8n-nodes-spicyapi.spicyapiAi",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Marketing & Content", "Development"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/spicyapi-ai/n8n-nodes-spicyapi#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/spicyapi-ai/n8n-nodes-spicyapi#readme"
+			}
+		]
+	}
+}

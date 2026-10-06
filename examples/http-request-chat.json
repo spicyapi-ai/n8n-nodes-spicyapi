@@ -1,0 +1,166 @@
+{
+	"name": "SpicyAPI: chat with a text model (HTTP Request)",
+	"nodes": [
+		{
+			"parameters": {
+				"content": "## Chat with a SpicyAPI text model\n\nThe chat endpoint is OpenAI-compatible, so the built-in **OpenAI** credential also works: set its Base URL to `https://api.spicyapi.ai/v1` and use it with the OpenAI Chat Model node.\n\nThis version uses a plain HTTP Request node with a **Bearer Auth** credential holding a key from https://spicyapi.ai/console/keys.\n\nText model IDs: `GET https://api.spicyapi.ai/v1/models?modality=text`.",
+				"width": 420,
+				"height": 420
+			},
+			"id": "5b1c0000-0000-4000-8000-000000000001",
+			"name": "About",
+			"type": "n8n-nodes-base.stickyNote",
+			"typeVersion": 1,
+			"position": [
+				-420,
+				-300
+			]
+		},
+		{
+			"parameters": {},
+			"id": "5b1c0000-0000-4000-8000-000000000002",
+			"name": "Start",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [
+				0,
+				0
+			]
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "5b1c0000-0000-4000-8000-00000000012d",
+							"name": "model",
+							"value": "deepseek/v4.1-flash/chat",
+							"type": "string"
+						},
+						{
+							"id": "5b1c0000-0000-4000-8000-00000000012e",
+							"name": "prompt",
+							"value": "Write three short taglines for a neighborhood coffee shop.",
+							"type": "string"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "5b1c0000-0000-4000-8000-000000000003",
+			"name": "Settings",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				220,
+				0
+			]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "https://api.spicyapi.ai/v1/chat/completions",
+				"options": {},
+				"authentication": "genericCredentialType",
+				"genericAuthType": "httpBearerAuth",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Idempotency-Key",
+							"value": "={{ 'n8n-' + $execution.id + '-' + $itemIndex }}"
+						}
+					]
+				},
+				"sendBody": true,
+				"specifyBody": "json",
+				"jsonBody": "={{ JSON.stringify({ model: $json.model, messages: [{ role: 'user', content: $json.prompt }], max_tokens: 400 }) }}"
+			},
+			"id": "5b1c0000-0000-4000-8000-000000000004",
+			"name": "Chat Completion",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.2,
+			"position": [
+				440,
+				0
+			],
+			"credentials": {
+				"httpBearerAuth": {
+					"id": "",
+					"name": "SpicyAPI Bearer"
+				}
+			}
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "5b1c0000-0000-4000-8000-0000000001f5",
+							"name": "text",
+							"value": "={{ $json.choices[0].message.content }}",
+							"type": "string"
+						},
+						{
+							"id": "5b1c0000-0000-4000-8000-0000000001f6",
+							"name": "totalTokens",
+							"value": "={{ $json.usage.total_tokens }}",
+							"type": "number"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "5b1c0000-0000-4000-8000-000000000005",
+			"name": "Answer",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				660,
+				0
+			]
+		}
+	],
+	"connections": {
+		"Start": {
+			"main": [
+				[
+					{
+						"node": "Settings",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Settings": {
+			"main": [
+				[
+					{
+						"node": "Chat Completion",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Chat Completion": {
+			"main": [
+				[
+					{
+						"node": "Answer",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"pinData": {},
+	"meta": {
+		"templateCredsSetupCompleted": false
+	}
+}

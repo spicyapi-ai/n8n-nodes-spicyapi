@@ -1,0 +1,80 @@
+name: Publish to npm
+
+# Runs when a version tag such as v0.1.0 is pushed. The tag must match package.json.
+#
+# n8n requires community nodes to be published from GitHub Actions with an npm provenance
+# statement. The provenance is signed with this workflow's GitHub OIDC token, so the job needs
+# `id-token: write` in both modes below.
+#
+# Authentication, in order of preference:
+#   1. npm trusted publishing (OIDC). Configure a trusted publisher for this package on
+#      npmjs.com (repository spicyapi-ai/n8n-nodes-spicyapi, workflow publish.yml, environment
+#      npm-release) and leave the NPM_TOKEN secret unset. No long-lived secret is involved.
+#   2. An npm token in the NPM_TOKEN secret. Trusted publishing can only be configured for a
+#      package that already exists, so the very first release uses a short-lived granular token.
+#      Delete the secret and revoke the token once trusted publishing is configured.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    environment: npm-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@latest
+
+      - run: npm ci --ignore-scripts
+
+      - name: Check that the tag matches package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${VERSION}."
+            exit 1
+          fi
+
+      - name: Lint (n8n community node rules)
+        run: npm run lint
+
+      - name: Build and test
+        run: npm test
+
+      # Skip when the version already exists, so re-running this workflow is safe.
+      - name: Publish if this version is new
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # prepublishOnly (n8n-node prerelease) refuses to publish unless this is set.
+          RELEASE_MODE: 'true'
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VERSION}" version > /dev/null 2>&1; then
+            echo "Skipping ${NAME}@${VERSION}: already published."
+            exit 0
+          fi
+          if [ -n "${NODE_AUTH_TOKEN}" ]; then
+            echo "Publishing ${NAME}@${VERSION} with the NPM_TOKEN secret."
+          else
+            echo "Publishing ${NAME}@${VERSION} with npm trusted publishing (OIDC)."
+          fi
+          npm publish --provenance --access public

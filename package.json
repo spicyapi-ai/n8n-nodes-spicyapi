@@ -1,0 +1,64 @@
+{
+	"name": "@spicyapi/n8n-nodes-spicyapi",
+	"version": "0.1.0",
+	"description": "n8n community node for SpicyAPI (spicyapi.ai): image, video, audio and chat models behind one API, with price checks before every paid run.",
+	"license": "MIT",
+	"homepage": "https://github.com/spicyapi-ai/n8n-nodes-spicyapi#readme",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"spicyapi",
+		"ai",
+		"image-generation",
+		"video-generation",
+		"text-to-image",
+		"image-to-video",
+		"text-to-speech",
+		"llm"
+	],
+	"author": {
+		"name": "SpicyAPI",
+		"email": "owner@spicyapi.ai"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/spicyapi-ai/n8n-nodes-spicyapi.git"
+	},
+	"bugs": {
+		"url": "https://github.com/spicyapi-ai/n8n-nodes-spicyapi/issues"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"test": "n8n-node build && node --test test/*.test.js",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.tsbuildinfo"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/SpicyapiAiApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/SpicyapiAi/SpicyapiAi.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "0.51.3",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^21.1.0",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}
