@@ -3,7 +3,7 @@ export const CREDENTIAL_NAME = 'spicyapiAiApi';
 export const DEFAULT_BASE_URL = 'https://api.spicyapi.ai';
 
 /** Kept in step with package.json by a unit test. */
-export const PACKAGE_VERSION = '0.1.0';
+export const PACKAGE_VERSION = '0.1.1';
 
 export const USER_AGENT = `SpicyAPI-n8n/${PACKAGE_VERSION}`;
 
