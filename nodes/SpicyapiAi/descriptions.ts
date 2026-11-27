@@ -25,6 +25,7 @@ export const resourceProperty: INodeProperties = {
 		{ name: 'Model', value: 'model' },
 		{ name: 'Task', value: 'task' },
 		{ name: 'Video', value: 'video' },
+		{ name: 'Workflow', value: 'workflow' },
 	],
 	default: 'image',
 };
@@ -142,6 +143,35 @@ export const operationProperties: INodeProperties[] = [
 		default: 'get',
 	},
 	generateOperation('video', 'a video'),
+	{
+		displayName: 'Operation',
+		name: 'operation',
+		type: 'options',
+		noDataExpression: true,
+		displayOptions: { show: { resource: ['workflow'] } },
+		options: [
+			{
+				name: 'Get Workflow Status',
+				value: 'getStatus',
+				description:
+					'Get the progress, step records, cost and output of a managed workflow run',
+				action: 'Get workflow status',
+			},
+			{
+				name: 'List Presets',
+				value: 'listPresets',
+				description: 'List official managed preset workflows and their input schemas',
+				action: 'List workflow presets',
+			},
+			{
+				name: 'Run Workflow',
+				value: 'run',
+				description: 'Start a managed preset workflow and optionally wait for its final output',
+				action: 'Run a workflow',
+			},
+		],
+		default: 'run',
+	},
 ];
 
 export const modelProperty: INodeProperties = {
@@ -561,6 +591,199 @@ export const chatProperties: INodeProperties[] = [
 				typeOptions: { rows: 3 },
 				default: '',
 				description: 'Instructions for the model, sent before the prompt',
+			},
+		],
+	},
+];
+
+export const workflowProperties: INodeProperties[] = [
+	{
+		displayName: 'Preset',
+		name: 'workflowPreset',
+		type: 'options',
+		required: true,
+		default: 'image-to-video-hd',
+		description: 'The managed preset workflow pipeline to run',
+		displayOptions: { show: { resource: ['workflow'], operation: ['run'] } },
+		options: [
+			{
+				name: 'Image Edit to 4K Upscale',
+				value: 'image-to-4k-upscale',
+				description: 'Refine a source image with a prompt, then upscale it to 4K',
+			},
+			{
+				name: 'Image Edit to HD Video',
+				value: 'image-to-video-hd',
+				description: 'Refine a source image with a prompt, then animate it into an HD video',
+			},
+			{
+				name: 'Video Extend to HD',
+				value: 'video-extend-hd',
+				description: 'Extend a source video clip with prompt-directed motion, then upscale to HD',
+			},
+		],
+	},
+	{
+		displayName: 'Prompt',
+		name: 'workflowPrompt',
+		type: 'string',
+		typeOptions: { rows: 4 },
+		required: true,
+		default: '',
+		placeholder: 'e.g. Restyle in golden-hour film lighting, then slowly push the camera forward',
+		description: 'Primary instruction applied across the workflow steps',
+		displayOptions: { show: { resource: ['workflow'], operation: ['run'] } },
+	},
+	{
+		displayName: 'Source Media',
+		name: 'workflowMediaSource',
+		type: 'options',
+		default: 'url',
+		description: 'Where the source image or video comes from',
+		displayOptions: { show: { resource: ['workflow'], operation: ['run'] } },
+		options: [
+			{
+				name: 'Binary File',
+				value: 'binary',
+				description: 'Upload a binary field from the incoming item',
+			},
+			{
+				name: 'URL',
+				value: 'url',
+				description: 'Use a public HTTPS link or a spicy:// file URI',
+			},
+		],
+	},
+	{
+		displayName: 'Source Media URL',
+		name: 'workflowMediaUrl',
+		type: 'string',
+		default: '',
+		placeholder: 'e.g. https://example.com/photo.jpg or spicy://f/...',
+		description:
+			'Source image URL (image-to-video-hd, image-to-4k-upscale) or source video URL (video-extend-hd)',
+		displayOptions: {
+			show: { resource: ['workflow'], operation: ['run'], workflowMediaSource: ['url'] },
+		},
+	},
+	{
+		displayName: 'Input Binary Field',
+		name: 'workflowBinaryProperty',
+		type: 'string',
+		default: 'data',
+		hint: 'The name of the input binary field containing the source image or video',
+		displayOptions: {
+			show: { resource: ['workflow'], operation: ['run'], workflowMediaSource: ['binary'] },
+		},
+	},
+	{
+		displayName: 'Additional Input Parameters (JSON)',
+		name: 'workflowInputParameters',
+		type: 'json',
+		default: '{}',
+		description:
+			'Optional preset-specific input fields as a JSON object (for example duration_seconds, resolution, aspect_ratio, output_format or target_resolution)',
+		displayOptions: { show: { resource: ['workflow'], operation: ['run'] } },
+	},
+	{
+		displayName: 'Options',
+		name: 'workflowRunOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: { show: { resource: ['workflow'], operation: ['run'] } },
+		options: [
+			{
+				displayName: 'Download Output',
+				name: 'downloadOutput',
+				type: 'boolean',
+				default: true,
+				description:
+					'Whether to download the final workflow output files into binary fields when complete',
+			},
+			{
+				displayName: 'Max Wait Time (Seconds)',
+				name: 'maxWaitTime',
+				type: 'number',
+				typeOptions: { minValue: 0 },
+				default: 0,
+				description: 'How long to wait for completion. 0 uses the default workflow timeout.',
+			},
+			{
+				displayName: 'Put Output in Field',
+				name: 'binaryPropertyName',
+				type: 'string',
+				default: 'data',
+				hint: 'The name of the output binary field. More files go to data_1, data_2 and so on.',
+			},
+			{
+				displayName: 'Retention (Seconds)',
+				name: 'retentionSeconds',
+				type: 'number',
+				typeOptions: { minValue: 0 },
+				default: 0,
+				description:
+					"Delete this workflow's step prompts and files sooner than the account default. 0 keeps the account default.",
+			},
+			{
+				displayName: 'Wait for Completion',
+				name: 'waitForCompletion',
+				type: 'boolean',
+				default: true,
+				description:
+					'Whether to poll until all steps finish. When off, the node returns the workflowId at once; check progress later with Get Workflow Status.',
+			},
+		],
+	},
+	{
+		displayName: 'Workflow ID',
+		name: 'workflowId',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: 'e.g. wfr_01j...',
+		description: 'The ID returned when the managed workflow was started',
+		displayOptions: { show: { resource: ['workflow'], operation: ['getStatus'] } },
+	},
+	{
+		displayName: 'Options',
+		name: 'workflowStatusOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: { show: { resource: ['workflow'], operation: ['getStatus'] } },
+		options: [
+			{
+				displayName: 'Download Output',
+				name: 'downloadOutput',
+				type: 'boolean',
+				default: true,
+				description:
+					'Whether to download the final output files of a succeeded workflow into binary fields',
+			},
+			{
+				displayName: 'Max Wait Time (Seconds)',
+				name: 'maxWaitTime',
+				type: 'number',
+				typeOptions: { minValue: 0 },
+				default: 0,
+				description:
+					'How long to wait when Wait for Completion is on. 0 uses the default workflow timeout.',
+			},
+			{
+				displayName: 'Put Output in Field',
+				name: 'binaryPropertyName',
+				type: 'string',
+				default: 'data',
+				hint: 'The name of the output binary field. More files go to data_1, data_2 and so on.',
+			},
+			{
+				displayName: 'Wait for Completion',
+				name: 'waitForCompletion',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to poll until the workflow reaches a terminal state instead of returning its current progress',
 			},
 		],
 	},

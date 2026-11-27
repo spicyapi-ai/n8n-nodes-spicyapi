@@ -1,0 +1,191 @@
+{
+	"name": "SpicyAPI: managed workflow image edit to HD video",
+	"nodes": [
+		{
+			"parameters": {
+				"content": "## Managed Workflow: Image Edit to HD Video\n\nRuns the official SpicyAPI `image-to-video-hd` multi-step pipeline in one node:\n\n1. Create a **SpicyAPI (spicyapi.ai) API** credential with your key from https://spicyapi.ai/console/keys and select it in **Run Managed Workflow**.\n2. Replace `imageUrl`, `prompt`, and optional video parameters in **Settings**.\n3. Run the workflow. SpicyAPI edits the keyframe, animates it into a 1080p video, and downloads the resulting MP4 into the `data` binary field.\n\nEach step is billed individually at its published rate. Unexecuted steps are never charged and failed steps are automatically refunded.",
+				"width": 440,
+				"height": 420
+			},
+			"id": "8c2f0000-0000-4000-8000-000000000001",
+			"name": "About",
+			"type": "n8n-nodes-base.stickyNote",
+			"typeVersion": 1,
+			"position": [
+				-460,
+				-180
+			]
+		},
+		{
+			"parameters": {},
+			"id": "8c2f0000-0000-4000-8000-000000000002",
+			"name": "Start",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [
+				0,
+				0
+			]
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000101",
+							"name": "imageUrl",
+							"value": "https://example.com/source-scene.jpg",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000102",
+							"name": "prompt",
+							"value": "Restyle in warm golden-hour cinema light, then slowly push the camera forward as mist drifts through the scene",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000103",
+							"name": "aspectRatio",
+							"value": "16:9",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000104",
+							"name": "resolution",
+							"value": "1080p",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000105",
+							"name": "durationSeconds",
+							"value": 5,
+							"type": "number"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "8c2f0000-0000-4000-8000-000000000003",
+			"name": "Settings",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				220,
+				0
+			]
+		},
+		{
+			"parameters": {
+				"resource": "workflow",
+				"operation": "run",
+				"workflowPreset": "image-to-video-hd",
+				"workflowPrompt": "={{ $json.prompt }}",
+				"workflowMediaSource": "url",
+				"workflowMediaUrl": "={{ $json.imageUrl }}",
+				"workflowInputParameters": "={{ JSON.stringify({ aspect_ratio: $json.aspectRatio, resolution: $json.resolution, duration_seconds: $json.durationSeconds, generate_audio: true }) }}",
+				"workflowRunOptions": {
+					"waitForCompletion": true,
+					"downloadOutput": true,
+					"binaryPropertyName": "data"
+				}
+			},
+			"id": "8c2f0000-0000-4000-8000-000000000004",
+			"name": "Run Managed Workflow",
+			"type": "@spicyapi/n8n-nodes-spicyapi.spicyapiAi",
+			"typeVersion": 1,
+			"position": [
+				460,
+				0
+			],
+			"credentials": {
+				"spicyapiAiApi": {
+					"id": "",
+					"name": "SpicyAPI (spicyapi.ai) API"
+				}
+			}
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000201",
+							"name": "workflowId",
+							"value": "={{ $json.workflowId }}",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000202",
+							"name": "state",
+							"value": "={{ $json.state }}",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000203",
+							"name": "totalCost",
+							"value": "={{ $json.totalCost }}",
+							"type": "string"
+						},
+						{
+							"id": "8c2f0000-0000-4000-8000-000000000204",
+							"name": "videoUrl",
+							"value": "={{ $json.output && $json.output.assets && $json.output.assets[0] ? $json.output.assets[0].url : '' }}",
+							"type": "string"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "8c2f0000-0000-4000-8000-000000000005",
+			"name": "Result Summary",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				720,
+				0
+			]
+		}
+	],
+	"connections": {
+		"Start": {
+			"main": [
+				[
+					{
+						"node": "Settings",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Settings": {
+			"main": [
+				[
+					{
+						"node": "Run Managed Workflow",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Run Managed Workflow": {
+			"main": [
+				[
+					{
+						"node": "Result Summary",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"pinData": {},
+	"meta": {
+		"templateCredsSetupCompleted": false
+	}
+}

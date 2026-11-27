@@ -10,8 +10,9 @@ This package is published by SpicyAPI (spicyapi.ai) and talks only to `api.spicy
 - [Generating images, video and audio](#generating-images-video-and-audio)
 - [Cost control and retries](#cost-control-and-retries)
 - [Long-running tasks](#long-running-tasks)
+- [Managed workflows](#managed-workflows)
 - [Chat](#chat)
-- [n8n Cloud: workflow templates](#n8n-cloud-workflow-templates)
+- [Workflow templates and examples](#workflow-templates-and-examples)
 - [Compatibility](#compatibility)
 - [Development](#development)
 
@@ -51,6 +52,9 @@ Saving the credential checks it against your account balance. Consider giving th
 | Model | Get Quote | The exact price of a request, without running it |
 | Account | Get Balance | Available, held and total balance in US dollars |
 | Chat | Message a Model | One chat completion from a text model |
+| Workflow | List Presets | List official managed preset workflows and their input schemas |
+| Workflow | Run Workflow | Run a managed preset workflow (`image-to-video-hd`, `image-to-4k-upscale`, `video-extend-hd`), poll to completion and download output |
+| Workflow | Get Workflow Status | Poll or advance an existing workflow run by ID and download its final output |
 
 ## Generating images, video and audio
 
@@ -80,22 +84,37 @@ For long videos you can avoid holding an execution open:
 - Turn off **Wait for Completion**, then use a **Wait** node and **Task > Get** (with **Wait for Completion** on, or in a loop).
 - Or set **Callback URL** to `{{ $execution.resumeUrl }}` and follow with a **Wait** node set to resume on a webhook call. Your n8n instance must be reachable over public HTTPS. After it resumes, read the task with **Task > Get** rather than trusting the callback body.
 
+## Managed workflows
+
+The **Workflow** resource calls SpicyAPI's official managed multi-step preset pipelines (`/api/v1/workflows*`):
+
+- **`image-to-video-hd`**: refine a source image with a prompt, then animate it into an HD video.
+- **`image-to-4k-upscale`**: refine a source image with a prompt, then upscale it to 2K/4K/8K detail.
+- **`video-extend-hd`**: extend an existing video clip with prompt-directed motion, then upscale to HD/4K.
+
+1. Use **Workflow > List Presets** to inspect live preset IDs, step models, billing summaries and input schemas.
+2. Use **Workflow > Run Workflow** to start a preset from either a URL (`https://` or `spicy://`) or an incoming binary field (uploaded automatically). By default the node polls until every step succeeds and downloads the final output into `data`.
+3. Turn off **Wait for Completion** to return `workflowId` immediately, then poll later with **Workflow > Get Workflow Status**.
+
+Every step is billed individually at its published rate; unexecuted steps are never charged and failed steps are refunded automatically.
+
 ## Chat
 
 **Chat > Message a Model** sends one non-streaming chat completion and returns the answer as `text`, with `usage` and the `taskId` of the call. Use **Additional Body Fields (JSON)** for a whole conversation (`messages`), tools or other OpenAI-compatible fields.
 
 For AI Agent workflows you can also use n8n's built-in OpenAI nodes: create an **OpenAI** credential with your SpicyAPI key and set its **Base URL** to `https://api.spicyapi.ai/v1`. The model list then shows every SpicyAPI model; pick a text model (their IDs end in `/chat`). If a request fails with the Responses API, turn off **Use Responses API** in the OpenAI Chat Model node.
 
-## n8n Cloud: workflow templates
+## Workflow templates and examples
 
-n8n Cloud can only install verified community nodes. The [`examples`](examples) folder has workflows that use only built-in nodes:
+The [`examples`](examples) folder includes ready-to-import workflows:
 
-| File | What it does |
-| --- | --- |
-| [`http-request-image.json`](examples/http-request-image.json) | Quote, check a price limit, create a task, poll until it finishes and download the image |
-| [`http-request-chat.json`](examples/http-request-chat.json) | One chat completion through the OpenAI-compatible endpoint |
+| File | Nodes used | What it does |
+| --- | --- | --- |
+| [`managed-workflow-image-to-video-hd.json`](examples/managed-workflow-image-to-video-hd.json) | SpicyAPI node (`Workflow > Run Workflow`) | Runs the `image-to-video-hd` managed workflow and downloads the final HD video |
+| [`http-request-image.json`](examples/http-request-image.json) | Built-in HTTP Request (works on n8n Cloud) | Quote, check a price limit, create a task, poll until it finishes and download the image |
+| [`http-request-chat.json`](examples/http-request-chat.json) | Built-in HTTP Request (works on n8n Cloud) | One chat completion through the OpenAI-compatible endpoint |
 
-Import a file with **Workflow menu > Import from File**, create a **Bearer Auth** credential with your SpicyAPI key as the token, and select it in the HTTP Request nodes.
+Import any file with **Workflow menu > Import from File**. For the HTTP Request templates (which also run on n8n Cloud), create a **Bearer Auth** credential with your SpicyAPI key as the token.
 
 ## Compatibility
 

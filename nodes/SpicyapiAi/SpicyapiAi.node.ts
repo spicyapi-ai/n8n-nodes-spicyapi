@@ -18,6 +18,7 @@ import {
 	messageModel,
 	uploadBinary,
 } from './actions/resources';
+import { getWorkflowStatus, listWorkflowPresets, runWorkflow } from './actions/workflows';
 import {
 	chatProperties,
 	fileProperties,
@@ -27,6 +28,7 @@ import {
 	operationProperties,
 	resourceProperty,
 	taskProperties,
+	workflowProperties,
 } from './descriptions';
 import { listSearch, loadOptions, resourceMapping } from './methods';
 import { CREDENTIAL_NAME } from './shared/constants';
@@ -48,6 +50,9 @@ const OPERATIONS: Record<string, Operation> = {
 	'model:getQuote': getQuote,
 	'account:getBalance': getBalance,
 	'chat:message': messageModel,
+	'workflow:listPresets': listWorkflowPresets,
+	'workflow:run': runWorkflow,
+	'workflow:getStatus': getWorkflowStatus,
 };
 
 export class SpicyapiAi implements INodeType {
@@ -81,6 +86,7 @@ export class SpicyapiAi implements INodeType {
 			...fileProperties,
 			...modelListProperties,
 			...chatProperties,
+			...workflowProperties,
 		],
 	};
 
@@ -110,12 +116,16 @@ export class SpicyapiAi implements INodeType {
 			} catch (error) {
 				if (this.continueOnFail()) {
 					const context = (error as NodeApiError).context ?? {};
+					const failedItem: JsonObject = {
+						error: (error as Error).message,
+						description: (error as NodeApiError).description ?? null,
+						taskId: (context.taskId as string) ?? null,
+					};
+					if (typeof context.workflowId === 'string' && context.workflowId) {
+						failedItem.workflowId = context.workflowId;
+					}
 					returnData.push({
-						json: {
-							error: (error as Error).message,
-							description: (error as NodeApiError).description ?? null,
-							taskId: (context.taskId as string) ?? null,
-						},
+						json: failedItem,
 						pairedItem: { item: itemIndex },
 					});
 					continue;

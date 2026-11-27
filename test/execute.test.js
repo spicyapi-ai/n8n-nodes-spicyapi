@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { describe, it } = require('node:test');
 
 const { envelope, fakeApi, fakeExecuteContext, fixtures, response, runNode } = require('./helpers');
@@ -336,6 +338,265 @@ describe('Chat', () => {
 			taskId: 'job_c',
 			ignoredParams: ['top_k', 'min_p'],
 		});
+	});
+});
+
+describe('Workflow', () => {
+	it('lists official managed workflow presets', async () => {
+		const api = fakeApi({
+			'GET /api/v1/workflows': [
+				response(
+					200,
+					envelope({
+						items: [
+							{ id: 'image-to-video-hd', name: 'Image Edit to HD Video', steps: [] },
+							{ id: 'image-to-4k-upscale', name: 'Image Edit to 4K Upscale', steps: [] },
+							{ id: 'video-extend-hd', name: 'Video Extend to HD', steps: [] },
+						],
+					}),
+				),
+			],
+		});
+		const [items] = await runNode(
+			fakeExecuteContext({
+				params: { resource: 'workflow', operation: 'listPresets' },
+				api,
+			}),
+		);
+		assert.deepEqual(
+			items.map((item) => item.json.id),
+			['image-to-video-hd', 'image-to-4k-upscale', 'video-extend-hd'],
+		);
+	});
+
+	it('starts a workflow run, polls until ready, and downloads the final media', async () => {
+		const mp4 = Buffer.from('00000018667479706d703432', 'hex');
+		const api = fakeApi({
+			'POST /api/v1/workflows/run': [
+				response(
+					202,
+					envelope({
+						workflowId: 'wfr_1',
+						preset: 'image-to-video-hd',
+						state: 'queued',
+						currentStep: 0,
+						totalSteps: 2,
+						totalCost: '0.028',
+						steps: [],
+					}),
+				),
+			],
+			'GET /api/v1/workflows/wfr_1': [
+				response(
+					200,
+					envelope({
+						workflowId: 'wfr_1',
+						preset: 'image-to-video-hd',
+						state: 'succeeded',
+						currentStep: 1,
+						totalSteps: 2,
+						totalCost: '0.14',
+						steps: [],
+						output: {
+							assets: [{ url: 'https://files.test/wfr_1.mp4', mime: 'video/mp4' }],
+						},
+					}),
+				),
+			],
+			'GET /wfr_1.mp4': [response(200, mp4, { 'content-type': 'video/mp4' })],
+		});
+		const params = {
+			resource: 'workflow',
+			operation: 'run',
+			workflowPreset: 'image-to-video-hd',
+			workflowPrompt: 'Golden hour dolly shot',
+			workflowMediaSource: 'url',
+			workflowMediaUrl: 'https://example.com/source.png',
+			workflowInputParameters: '{"resolution":"1080p","duration_seconds":5}',
+			workflowRunOptions: { waitForCompletion: true, downloadOutput: true },
+		};
+		const [items] = await runNode(fakeExecuteContext({ params, api }));
+		const runCall = api.calls.find((call) => call.key === 'POST /api/v1/workflows/run');
+		assert.deepEqual(runCall.options.body, {
+			preset: 'image-to-video-hd',
+			input: {
+				prompt: 'Golden hour dolly shot',
+				image_url: 'https://example.com/source.png',
+				resolution: '1080p',
+				duration_seconds: 5,
+			},
+		});
+		assert.match(runCall.options.headers['Idempotency-Key'], /^n8n-[0-9a-f]{64}$/);
+		assert.equal(items[0].json.workflowId, 'wfr_1');
+		assert.equal(items[0].json.totalCost, '0.14');
+		assert.equal(items[0].binary.data.fileName, 'wfr_1.mp4');
+		assert.equal(items[0].binary.data.mimeType, 'video/mp4');
+	});
+
+	it('uploads binary input for image-to-4k-upscale and returns immediately when waitForCompletion is false', async () => {
+		const api = fakeApi({
+			'POST /api/v1/common/upload-url': [
+				response(
+					200,
+					envelope({
+						fileId: 'fil_wf',
+						uploadUrl: 'https://upload.test/put/wf',
+						method: 'PUT',
+						headers: { 'Content-Type': 'image/png', 'Content-Length': String(PNG.length) },
+						maxBytes: 10485760,
+					}),
+				),
+			],
+			'PUT /put/wf': [response(200, '')],
+			'POST /api/v1/files/fil_wf/commit': [response(200, envelope({ uri: 'spicy://f/fil_wf' }))],
+			'POST /api/v1/workflows/run': [
+				response(
+					202,
+					envelope({
+						workflowId: 'wfr_up',
+						preset: 'image-to-4k-upscale',
+						state: 'queued',
+						currentStep: 0,
+						totalSteps: 2,
+						totalCost: '0.028',
+						steps: [],
+					}),
+				),
+			],
+		});
+		const context = fakeExecuteContext({
+			params: {
+				resource: 'workflow',
+				operation: 'run',
+				workflowPreset: 'image-to-4k-upscale',
+				workflowPrompt: 'Sharpen portrait lighting',
+				workflowMediaSource: 'binary',
+				workflowBinaryProperty: 'photo',
+				workflowInputParameters: '{"resolution":"4k"}',
+				workflowRunOptions: { waitForCompletion: false, retentionSeconds: 3600 },
+			},
+			items: [
+				{
+					json: {},
+					binary: {
+						photo: { data: PNG.toString('base64'), mimeType: 'image/png', fileName: 'src.png' },
+					},
+				},
+			],
+			api,
+		});
+		context.getCredentials = async () => ({
+			apiKey: 'sk-spicy-wf-upload-test',
+			baseUrl: 'https://api.test',
+		});
+		const [items] = await runNode(context);
+		const runCall = api.calls.find((call) => call.key === 'POST /api/v1/workflows/run');
+		assert.equal(runCall.options.body.input.image_url, 'spicy://f/fil_wf');
+		assert.equal(runCall.options.headers['X-Spicy-Retention'], '3600');
+		assert.equal(items[0].json.workflowId, 'wfr_up');
+		assert.equal(items[0].json.state, 'queued');
+	});
+
+	it('maps video-extend-hd to video_url and validates missing media before calling the API', async () => {
+		const api = fakeApi({});
+		await assert.rejects(
+			runNode(
+				fakeExecuteContext({
+					params: {
+						resource: 'workflow',
+						operation: 'run',
+						workflowPreset: 'video-extend-hd',
+						workflowPrompt: 'Continue panning across the harbour',
+						workflowMediaSource: 'url',
+						workflowMediaUrl: '',
+						workflowInputParameters: '{}',
+						workflowRunOptions: {},
+					},
+					api,
+				}),
+			),
+			/requires 'video_url'/,
+		);
+		assert.equal(api.calls.length, 0);
+	});
+
+	it('gets workflow status and surfaces workflow failure on continueOnFail', async () => {
+		const api = fakeApi({
+			'GET /api/v1/workflows/wfr_done': [
+				response(
+					200,
+					envelope({
+						workflowId: 'wfr_done',
+						preset: 'image-to-4k-upscale',
+						state: 'succeeded',
+						totalCost: '0.04',
+						output: { assets: [{ url: 'https://files.test/wfr_done.png', mime: 'image/png' }] },
+					}),
+				),
+			],
+			'GET /wfr_done.png': [response(200, PNG, { 'content-type': 'image/png' })],
+		});
+		const [items] = await runNode(
+			fakeExecuteContext({
+				params: {
+					resource: 'workflow',
+					operation: 'getStatus',
+					workflowId: 'wfr_done',
+					workflowStatusOptions: { waitForCompletion: false, downloadOutput: true },
+				},
+				api,
+			}),
+		);
+		assert.equal(items[0].json.workflowId, 'wfr_done');
+		assert.equal(items[0].binary.data.fileName, 'wfr_done.png');
+
+		const failApi = fakeApi({
+			'POST /api/v1/workflows/run': [
+				response(
+					200,
+					envelope({
+						workflowId: 'wfr_bad',
+						preset: 'image-to-video-hd',
+						state: 'failed',
+						errorCode: 'content_rejected',
+						errorMessage: 'Declined',
+					}),
+				),
+			],
+		});
+		const [failedItems] = await runNode(
+			fakeExecuteContext({
+				params: {
+					resource: 'workflow',
+					operation: 'run',
+					workflowPreset: 'image-to-video-hd',
+					workflowPrompt: 'Animate',
+					workflowMediaSource: 'url',
+					workflowMediaUrl: 'https://example.com/a.png',
+					workflowInputParameters: '{}',
+					workflowRunOptions: { waitForCompletion: true },
+				},
+				api: failApi,
+				continueOnFail: true,
+			}),
+		);
+		assert.equal(failedItems[0].json.workflowId, 'wfr_bad');
+		assert.match(failedItems[0].json.error, /content_rejected: Declined/);
+	});
+
+	it('ships a valid managed-workflow example JSON', () => {
+		const raw = fs.readFileSync(
+			path.join(__dirname, '..', 'examples', 'managed-workflow-image-to-video-hd.json'),
+			'utf8',
+		);
+		const workflow = JSON.parse(raw);
+		const spicyNode = workflow.nodes.find(
+			(node) => node.type === '@spicyapi/n8n-nodes-spicyapi.spicyapiAi',
+		);
+		assert.ok(spicyNode, 'example must include the SpicyAPI community node');
+		assert.equal(spicyNode.parameters.resource, 'workflow');
+		assert.equal(spicyNode.parameters.operation, 'run');
+		assert.equal(spicyNode.parameters.workflowPreset, 'image-to-video-hd');
 	});
 });
 

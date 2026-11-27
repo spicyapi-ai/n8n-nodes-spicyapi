@@ -406,7 +406,7 @@ export async function downloadOutputs(
 	itemIndex: number,
 ): Promise<IBinaryKeyData> {
 	const binary: IBinaryKeyData = {};
-	const taskId = String(task.taskId ?? 'output');
+	const filePrefix = String(task.taskId ?? task.workflowId ?? 'output');
 	let index = 0;
 	for (const asset of outputAssets(task)) {
 		if (typeof asset.url !== 'string' || !asset.url) {
@@ -417,7 +417,7 @@ export async function downloadOutputs(
 			(typeof asset.mime === 'string' && asset.mime) ||
 			contentType.split(';')[0] ||
 			'application/octet-stream';
-		const fileName = `${taskId}${index > 0 ? `-${index}` : ''}.${extensionForMime(mime)}`;
+		const fileName = `${filePrefix}${index > 0 ? `-${index}` : ''}.${extensionForMime(mime)}`;
 		binary[binaryKeyFor(binaryBase, index)] = await this.helpers.prepareBinaryData(
 			data,
 			fileName,
